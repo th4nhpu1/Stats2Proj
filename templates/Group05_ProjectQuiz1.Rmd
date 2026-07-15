@@ -242,7 +242,7 @@ Data Split: We applied an $80/20$ train/test split utilizing the group-specific 
 
 Missing-Value Plan: The dataset contains zero missing values. Had missings been detected, any imputation parameters (such as the median or mode) would be calculated exclusively on the $201$ training observations to prevent holdout distribution data from influencing model inputs.  
 
-Scaling Rule: Regularization imposes penalties ($L_1, L_2$) on coefficient magnitudes. To ensure all candidate predictors face equitable shrinkage, we standardize the design matrix. The transformation is computed as $z_{i,j} = \frac{x_{i,j} - \mu_{train,j}}{\sigma_{train,j}}$. Crucially, $\mu$ and $\sigma$ are derived exclusively from the training matrix. Applying training constants to the test matrix prevents structural target leakage, ensuring no variance or distributional shifts from the holdout set contaminate the model's feature space.  
+Scaling Rule: Regularization imposes penalties ($L_1, L_2$) on coefficient magnitudes. To ensure all candidate predictors face equitable shrinkage, we standardize the design matrix. The transformation is computed as  $z_{i,j} = \frac{x_{i,j} - \mu_{train,j}}{\sigma_{train,j}}$. Crucially, $\mu$ and $\sigma$ are derived exclusively from the training matrix. Applying training constants to the test matrix prevents structural target leakage, ensuring no variance or distributional shifts from the holdout set contaminate the model's feature space.  
 
 Cross-Validation Assignment: We defined a single, reproducible 5-fold assignment (foldid) on the training observations using the seed $240305$. Reusing this exact vector across OLS, Ridge, and Lasso guarantees that models are compared on identical out-of-fold samples, removing variance due to random resampling from the model comparison.  
 
@@ -250,12 +250,65 @@ Leakage Prevention Summary: By sequestering y_test, calculating scaling factors 
 
 ## 1C. Training-data exploration
 
-```{r training-eda, eval=FALSE}
-# Use analysis_data[train_id, ] only. Add focused plots and summaries.
+```{r training-eda, echo=TRUE, message=FALSE, warning=FALSE}
+# Isolate training data to strictly prevent leakage
+train_data <- analysis_data[train_id, ]
+
+# 1. Response Distribution
+p_dist <- ggplot(train_data, aes(x = brozek)) +
+  geom_histogram(bins = 20, fill = "steelblue", color = "black", alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "Distribution of Brozek Body Fat % (Training Set)",
+       x = "Brozek (%)", y = "Count")
+print(p_dist)
+
+# 2. Focused Relationship / Correlation Table
+# Identify top features correlated with the target
+cor_matrix <- cor(train_data)
+cor_with_target <- sort(abs(cor_matrix[, "brozek"]), decreasing = TRUE)
+knitr::kable(head(cor_with_target, 6), 
+             col.names = c("Absolute Correlation with Brozek"), digits = 3,
+             caption = "Top Correlated Predictors (Training Set)")
+
+# 3. Anomaly Detection
+# Scatter plot to identify severe outliers
+p_anom <- ggplot(train_data, aes(x = height, y = weight)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Anomaly Check: Height vs. Weight",
+       x = "Height (inches)", y = "Weight (lbs)")
+print(p_anom)
+
+# Isolate the mathematically anomalous observation
+anomaly_record <- train_data |> filter(height < 40 | weight > 300)
+knitr::kable(anomaly_record[, c("brozek", "age", "weight", "height")], 
+             caption = "Potential Influential / Anomalous Observations")
+
+# 4. Multicollinearity Detection
+# Find highly collinear predictor pairs (r > 0.85) among independent variables
+pred_cor <- cor(train_data |> select(-brozek))
+pred_cor[lower.tri(pred_cor, diag = TRUE)] <- NA
+high_cor <- as.data.frame(as.table(pred_cor)) |>
+  filter(abs(Freq) > 0.85) |>
+  arrange(desc(abs(Freq)))
+
+knitr::kable(head(high_cor, 5), 
+             col.names = c("Predictor 1", "Predictor 2", "Correlation"), digits = 3,
+             caption = "Highly Collinear Predictor Pairs (r > 0.85)")
 ```
 
 *Interpret multicollinearity, one anomaly, and the question regularization will address.*
 
+Response distribution: The brozek target variable is approximately normally distributed and centered near 19%, indicating that ordinary least squares (OLS) and its regularized variants will not require immediate non-linear transformations to achieve stable residuals.
+
+Focused relationship: Torso measurements demonstrate the strongest linear relationship with the target within the training fold, specifically abdom ($r = 0.817$) and adipos ($r = 0.744$).
+
+Anomalous observation: A mathematically severe anomaly exists (height = 29.5 inches, weight = 205.0 lbs), which is almost certainly a data-entry error. Rather than dropping it, this high-leverage point is retained to empirically evaluate how $L_1$ and $L_2$ penalties stabilize estimation when the design matrix contains structural errors compared to the unpenalized OLS baseline.  
+
+Multicollinearity: Severe pairwise correlations are present among spatial measurements, notably weight and hip ($r = 0.940$), and adipos and abdom ($r = 0.932$). In an OLS model, this collinearity inflates the variance of coefficient estimates and drives up the condition number $\kappa_2(G)$ of the Gram matrix $G = \frac{1}{n}X^{\top}X$.
+
+Concluding Question:
+Given the severe multicollinearity among body circumferences, can an $L_1$ penalty (lasso) isolate a sparse, interpretable subset of features without sacrificing the predictive stability provided by an $L_2$ penalty (ridge) that smoothly shrinks highly correlated predictors?
 # Problem 2. OLS, ridge, and lasso
 
 ## 2A. OLS baseline

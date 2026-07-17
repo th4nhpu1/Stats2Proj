@@ -833,11 +833,19 @@ kable(data.frame(alpha = alpha_grid, cv_mse = h_enet_cv,
       digits = 4, row.names = FALSE,
       caption = "Elastic-net alpha search on the ReLU feature matrix")
 ```
-*State which weights are fixed, which are learned, and how active features are counted.*
+**Parameter Distinction and Feature Counting:**
+
+In this experiment, the input-to-hidden weights (matrix $A$) and the hidden biases ($c_{off}$) are generated once from a Gaussian distribution and strictly fixed (frozen). The regularization models do not update them. The parameters being learned are the hidden-to-output weights (the $\beta$ coefficients of the linear models applied to the ReLU matrix $H$). Active features are counted by evaluating the learned $\beta$ vector; any feature whose corresponding absolute coefficient exceeds a strict numerical tolerance ($> 10^{-8}$) is classified as active, meaning it survived the shrinkage or soft-thresholding mechanisms.
 
 ## 4D. Locked declaration and final holdout evaluation
 
-> **Locked before viewing `y_test`:** [preprocessing, candidate specifications, selected tuning values, feature seed, nominated deployment model, metrics]
+> **Locked before viewing `y_test`:** 
+> *   **Preprocessing**: Center/scale constants and constant-feature dropping rules were computed exclusively on the training sets (`x_train` and `H_train`), then applied uniformly to the holdout sets (`x_test` and `H_test`).
+> *   **Candidate specifications**: OLS, Ridge, Lasso, and Elastic net on original predictors; Ridge, Lasso, and Elastic net on the M=200 ReLU feature matrix. 
+> *   **Selected tuning values**: All lambda and alpha parameters were selected via 5-fold cross-validation using the shared `foldid` on training data.
+> *   **Feature seed**: `seeds$features`.
+> *   **Nominated deployment model**: Lasso at `lambda.1se` on the original predictors (as justified in Section 2D).
+> *   **Metrics**: RMSE and MAE.
 
 # This must be the first analysis chunk that uses y_test for evaluation.
 # Generate all fixed candidate predictions and one RMSE/MAE table here.
@@ -874,11 +882,28 @@ kable(holdout, digits = 4, row.names = FALSE,
       caption = "Final holdout performance (n_test = 51). Computed once; no retuning follows.")
 ```
 
-*State whether the holdout evidence supports the predeclared choice. Do not retune.*
+**Holdout Evidence Evaluation:**
+
+**Holdout Evidence Evaluation:**
+The holdout evidence supports our predeclared choice. The nominated Lasso `lambda.1se` model achieved an RMSE of 4.4070. While this error is slightly higher than the best-performing Elastic net on ReLU features (RMSE 4.1310) and the unpenalized OLS (RMSE 4.1698), the tradeoff is entirely justified. Lasso `lambda.1se` successfully reduced the model to exactly 5 non-redundant predictors, maintaining strict clinical interpretability and structural stability without suffering a severe loss in predictive accuracy compared to the highly complex, 200-feature ReLU models.
 
 ## 4E. Deep-learning connection and limitations
 
-*Distinguish penalty, weight decay, output-weight sparsity, pruning, dropout, and a trained deep network. Cite the sources from 4A and discuss at least two limitations.*
+**1. L2 Penalty vs. Weight Decay in Adaptive Optimization**
+In standard stochastic gradient descent (SGD), adding an $L_2$ penalty to the loss function and applying explicit weight decay in the parameter update rule are mathematically equivalent. However, Loshchilov & Hutter (2019) establish that in adaptive gradient algorithms (e.g., Adam), these two mechanisms diverge. $L_2$ regularization dynamically scales the penalty based on historical gradients, which undertaxes weights with large gradients. Decoupling the weight decay step (AdamW) applies a constant shrinkage rate, correctly regularizing the network and improving generalization.
+
+**2. Output-Weight Sparsity vs. Input-to-Hidden Sparsity**
+When lasso ($L_1$ regularization) forces a learned output weight $\beta_m$ to exactly zero, it removes that specific hidden feature $h_m(x)$ from the final prediction. However, this does not create structural sparsity in the input-to-hidden layer. The incoming weights corresponding to that node (the $m$-th column of the fixed matrix $A$) remain dense and non-zero.
+
+**3. Dropout vs. Permanent Pruning**
+Dropout acts as a stochastic regularizer by temporarily masking random neuron activations during each forward pass to prevent complex co-adaptations. It is a dynamic training mechanism. In contrast, the exact sparsity induced by lasso or network pruning constitutes permanent removal. Once a coefficient is penalized to zero, the connection is permanently severed for both training and inference.
+
+**4. Fixed Features vs. Trained Deep Networks**
+The random ReLU feature matrix deployed in Section 4C functions as a fixed kernel projection. Because the projection matrix $A$ is frozen, the model fundamentally lacks representation learning—it cannot backpropagate error signals to optimize its internal feature representations. While it bridges linear models to non-linear transformations, it does not possess the hierarchical feature extraction capabilities of a fully trained deep neural network.
+
+**Limitations of the Experiment:**
+1. **High Variance to Initialization:** The non-linear feature space is dictated entirely by a single random draw of matrix $A$ (`seeds$features`). The evaluation metrics are highly sensitive to this unoptimized, stochastic initialization.
+2. **Lack of Gradient Flow:** By locking the hidden layer, this experiment cannot evaluate how regularization interacts with the vanishing or exploding gradient problems inherent to training deep, multilayered architectures.
 
 # Problem 5. Report quality and reproducibility
   

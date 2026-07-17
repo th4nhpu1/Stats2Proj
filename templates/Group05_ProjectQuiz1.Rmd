@@ -350,17 +350,66 @@ Given the severe multicollinearity among body circumferences, can an $L_1$ penal
 **Observed result and explanation:** [result]
 
 # Problem 3. Mathematical mechanisms
-
 ## 3A. Ridge and conditioning
 
-*Write the ridge derivation. Define dimensions and explain uniqueness.*
+Starting from the objective function for ridge regression:
+$$Q_{\lambda}(b)=\frac{1}{2n}||y-Xb||_{2}^{2}+\frac{\lambda}{2}||b||_{2}^{2}$$
 
-```{r ridge-conditioning, eval=FALSE}
+We take the derivative of $Q_{\lambda}(b)$ with respect to the coefficient vector $b$:
+$$\nabla_{b}Q_{\lambda}(b)=-\frac{1}{n}X^{\top}(y-Xb)+\lambda b$$
+
+To find the minimizer, we set the gradient to zero:
+$$-\frac{1}{n}X^{\top}y+\frac{1}{n}X^{\top}Xb+\lambda b=0$$
+
+Given the definitions of the Gram matrix $G=\frac{1}{n}X^{\top}X$ and the vector $z=\frac{1}{n}X^{\top}y$, we substitute them into the equation:
+$$-z+Gb+\lambda b=0$$
+$$(G+\lambda I_{p})b=z$$
+
+**Uniqueness explanation:** The Gram matrix $G$ is positive semi-definite. For any penalty parameter $\lambda>0$, the scaled identity matrix $\lambda I_{p}$ is strictly positive definite. Therefore, their sum $(G+\lambda I_{p})$ is always strictly positive definite and invertible. This guarantees that the normal equations have a unique minimizer, given by:
+$$\hat{b}_{ridge}=(G+\lambda I_{p})^{-1}z$$
+
+```{r ridge-conditioning}
+# Note: ridge_lambda_min must be retrieved from Problem 2B results.
+ridge_lambda_min <- 0.6401 
+
+cond_metrics <- safe_condition_numbers(x_train, lambda = ridge_lambda_min)
+print(cond_metrics)
+
+## ```{r ridge-conditioning, eval=FALSE}
 # Use x_train and the fitted ridge lambda.min.
 # safe_condition_numbers(x_train, lambda = ...)
 ```
-
 ## 3B. Lasso optimality and soft thresholding
+
+The objective function for lasso regression is[cite: 1]:
+$$R_{\lambda}(b)=\frac{1}{2n}||y-Xb||_{2}^{2}+\lambda||b||_{1}$$
+
+Unlike ridge, the $L_1$ penalty is not differentiable at $b_j = 0$. Therefore, we use subgradients. The optimality condition requires that zero is in the subdifferential of the objective with respect to each coefficient $b_j$:
+$$\frac{\partial}{\partial b_j} \left( \frac{1}{2n}||y-Xb||_{2}^{2} \right) + \lambda \partial |b_j| \ni 0$$
+
+Using $G=\frac{1}{n}X^{\top}X$ and $z=\frac{1}{n}X^{\top}y$[cite: 1], the partial derivative of the loss term is $(Gb)_j - z_j$. The subdifferential of $|b_j|$ is $sign(b_j)$ if $b_j \neq 0$, and the interval $[-1, 1]$ if $b_j = 0$.
+
+**1. Optimality conditions for zero and nonzero coefficients:**
+*   **Nonzero coefficient ($\hat{b}_j \neq 0$):** The condition is an exact equality:
+    $$(G\hat{b})_j - z_j + \lambda \cdot sign(\hat{b}_j) = 0$$
+*   **Zero coefficient ($\hat{b}_j = 0$):** The condition becomes an inequality:
+    $$|(G\hat{b})_j - z_j| \le \lambda$$
+    which means $|z_j - \sum_{k \neq j} G_{jk}\hat{b}_k| \le \lambda$.
+
+**2. Soft-thresholding rule when $G = I_p$:**
+When the design matrix is orthonormal, $G = I_p$. Thus, $(G\hat{b})_j = \hat{b}_j$. The optimality conditions simplify to:
+$$0 \in \hat{b}_j - z_j + \lambda \partial |\hat{b}_j|$$
+*   If $\hat{b}_j > 0$: $\hat{b}_j - z_j + \lambda = 0 \implies \hat{b}_j = z_j - \lambda$ (requires $z_j > \lambda$).
+*   If $\hat{b}_j < 0$: $\hat{b}_j - z_j - \lambda = 0 \implies \hat{b}_j = z_j + \lambda$ (requires $z_j < -\lambda$).
+*   If $\hat{b}_j = 0$: $|z_j| \le \lambda$.
+
+Combining these three cases yields the soft-thresholding rule[cite: 1]:
+$$\hat{b}_{j}=sign(z_{j})(|z_{j}|-\lambda)_{+}$$
+
+**3. Why Lasso produces exact zeros compared to Ridge:**
+The lasso optimality condition at $\hat{b}_j = 0$ is a region: the gradient of the unpenalized loss must simply fall within the interval $[-\lambda, \lambda]$. Because this is a wide interval of width $2\lambda$, there is a high probability that the condition is met exactly, pinning the coefficient to absolute zero[cite: 1]. 
+In contrast, ridge regression is globally differentiable with a penalty gradient of $\lambda \hat{b}_j$. The ridge optimality condition is $(G + \lambda I_p)\hat{b} = z$. Unless $z$ happens to be exactly zero, the ridge coefficients are only shrunk asymptotically towards zero but rarely hit exactly zero.
+## 3B. Lasso optimality and soft thresholding Task RequireMent
 
 *Derive the zero/nonzero optimality conditions and the orthonormal-design formula.*
 

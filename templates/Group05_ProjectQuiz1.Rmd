@@ -40,6 +40,7 @@ We confirm that every group member can explain the submitted analysis. AI use is
 # Reproducible setup {-}
 
 ```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = TRUE)
 required_packages <- c("tidyverse", "glmnet", "broom", "knitr")
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
@@ -437,10 +438,11 @@ lasso_active_1se <- get_active_features(lasso_cv, "lambda.1se")
 
 # 4. Formatted output for the RMarkdown report
 cat(sprintf("lambda.min: %.4f (CV MSE: %.4f)\n", lasso_lambda_min, lasso_err_min))
-cat("Active predictors (lambda.min):", paste(lasso_active_min, collapse = ", "), "\n\n")
-
+cat("Active predictors (lambda.min):\n", 
+    paste(strwrap(paste(lasso_active_min, collapse = ", "), width = 70), collapse = "\n"), "\n\n")
 cat(sprintf("lambda.1se: %.4f (CV MSE: %.4f)\n", lasso_lambda_1se, lasso_err_1se))
-cat("Active predictors (lambda.1se):", paste(lasso_active_1se, collapse = ", "), "\n")
+cat("Active predictors (lambda.1se):\n", 
+    paste(strwrap(paste(lasso_active_1se, collapse = ", "), width = 70), collapse = "\n"), "\n")
 
 # 5. Visualizations
 par(mfrow = c(1, 2))
@@ -683,12 +685,18 @@ Our numerical outputs directly demonstrate this mathematical mechanism. Due to e
 # Problem 4. Elastic net and a neural-feature bridge
 
 ## 4A. Research question and source map
-**Research direction:** Weight Decay ($\ell_2$ Regularization Link in Deep Learning)
+
+**Research direction:** $L_2$ penalties and weight decay.
+
+**Research question:** In what sense is the $L_2$ penalty we apply to the output
+weights of our fixed ReLU feature model (Problem 4C) the same mechanism as
+"weight decay" in neural-network training, and where does that equivalence break
+down?
 
 | Claim | Exact primary source and locator | What it establishes | What it does not establish |
 |---|---|---|---|
-| Adding an $\ell_2$ penalty to the network objective function functions as an adaptive regularizer that reduces overfitting by continuously shrinking parameter weights. | Krogh \& Hertz (1991), *Advances in NeurIPS*, Section 2, Equation 4. | Establishes that weight decay behaves as a smooth continuous shrinker on parameters, acting as a low-pass filter that dampens the network's sensitivity to high-frequency training noise to improve generalization. | Does not address the mathematical interaction between weight decay and modern adaptive gradient steps, nor does it generate structural network sparsity. |
-| Standard $\ell_2$ regularization and true weight decay are not equivalent when paired with modern adaptive gradient optimizers, requiring an explicit decoupling of the decay step. | Loshchilov \& Hutter (2017), *International Conference on Learning Representations (ICLR)*, Section 3, Algorithm 2. | Establishes that for adaptive gradient algorithms (such as Adam), traditional $\ell_2$ regularization fails to regularize correctly, and the weight decay step must be explicitly decoupled from the gradient updates (creating the AdamW optimizer) to restore generalization benefits. | Does not prove a unique optimization path for non-convex loss surfaces, nor does it permanently drive weak network weights to absolute zero for network compression.|
+| Adding a term proportional to $\sum_i w_i^2$ to the training cost improves generalization by penalizing large weights, and its effect can be characterized through the reduction in the effective number of parameters. | Krogh and Hertz [-@krogh1991], *NeurIPS 4*, Eq. (1)–(2) and the "effective number of parameters" analysis. | That an $L_2$ cost term shrinks weights toward zero and yields a measurable generalization improvement in a feedforward network; this is the same additive penalty used in ridge. | That the shrinkage produces exact zeros, that it applies to input-to-hidden weights specifically, or that the equivalence survives adaptive optimizers. |
+| **(Methodological)** With adaptive gradient methods, adding $L_2$ to the loss is *not* equivalent to decaying weights; the decay must be decoupled from the gradient update. | Loshchilov and Hutter [-@loshchilov2019], ICLR 2019, Algorithm 2 (AdamW) and §2–3. | That "weight decay" and "$L_2$ penalty" name different procedures once the optimizer rescales gradients per-coordinate; prescribes decoupling as the fix. | That either variant induces sparsity, or that any conclusion transfers to our convex, closed-form `glmnet` setting, which uses neither Adam nor SGD. |
 
 ## 4B. Elastic net on original predictors
 

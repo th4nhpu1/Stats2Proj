@@ -1,7 +1,7 @@
 ---
 title: "ASESII 24A02 Project-Based Quiz 1"
-subtitle: "Ridge, Lasso, and Regularization for Neural Features"
-author: "Group 05: [Bùi Trọng Thành - 24125043, Phan Anh Khoa - 24125059, Văn Tuấn Khải - 24125032, Huỳnh Hữu Phúc Minh - 24125068]"
+author: "Group 05: [Bùi Trọng Thành - 24125043, Phan Anh Khoa - 24125059, Văn Tuấn
+  Khải - 24125032, Huỳnh Hữu Phúc Minh - 24125068]"
 date: "`r format(Sys.Date(), '%Y-%m-%d')`"
 output:
   pdf_document:
@@ -12,10 +12,14 @@ output:
   html_document:
     toc: true
     toc_depth: 3
+  word_document:
+    toc: true
+    toc_depth: '3'
+subtitle: Ridge, Lasso, and Regularization for Neural Features
 bibliography: references.bib
 link-citations: true
 params:
-  group_number: 05
+  group_number: 5
 fontsize: 11pt
 geometry: margin=1in
 ---
@@ -165,7 +169,7 @@ safe_condition_numbers <- function(x, lambda, tol = 1e-10) {
 
 ## 1A. Target and predictors
 
-```{r data-configuration, eval=FALSE}
+```{r data-configuration, eval=TRUE}
 config <- if (group_number %% 2L == 1L) {
   list(
     file = "fat.csv",
@@ -209,7 +213,7 @@ Including any outcome-derived variable fundamentally invalidates the prediction 
 
 ## 1B. Split and train-only preprocessing
 
-```{r split-and-scale, eval=FALSE}
+```{r split-and-scale, eval=TRUE}
 
 if (anyNA(analysis_data)) {
   stop("Missing values detected.")
@@ -372,11 +376,12 @@ Given the severe multicollinearity among body circumferences, can an $L_1$ penal
 
 ## 4A. Research question and source map
 
-**Research direction:** [weight decay / sparse weights / pruning / dropout]
+**Research direction:** $L_2$ penalties and weight decay
 
 | Claim | Exact primary source and locator | What it establishes | What it does not establish |
 |---|---|---|---|
-| [Claim] | [Citation, section/page/equation] | [Support] | [Boundary] |
+| Weight decay improves generalization by suppressing irrelevant weight components and mitigating the effects of static noise on target values. | Krogh, A., & Hertz, J. A. (1991). "A Simple Weight Decay Can Improve Generalization." NeurIPS. Section 4 & Section 5. | It proves mathematically that in a linear network, weight decay chooses the smallest weight vector solution and minimizes the generalization error by suppressing noise. | It does not establish exact global behavior for general non-linear networks, as the non-linear analysis relies strictly on local linearization around the optimal weight vector. |
+| $L_2$ regularization and weight decay are not equivalent in adaptive gradient methods (like Adam), and decoupling weight decay substantially improves generalization. | Loshchilov, I., & Hutter, F. (2019). "Decoupled Weight Decay Regularization." ICLR. Section 1 & Section 2 (Proposition 1 & 2). | It proves that $L_2$ and weight decay are identical for standard SGD but intrinsically different for adaptive optimizers. It establishes that decoupled weight decay (AdamW) makes Adam competitive with SGD with momentum. | It does not conclusively establish this superiority across all deep learning domains, as the empirical validation is heavily focused on image classification datasets (CIFAR, ImageNet32x32). |
 
 ## 4B. Elastic net on original predictors
 
@@ -418,7 +423,7 @@ M <- 200L
 *Distinguish penalty, weight decay, output-weight sparsity, pruning, dropout, and a trained deep network. Cite the sources from 4A and discuss at least two limitations.*
 
 # Problem 5. Report quality and reproducibility
-
+  
 ## 5A. Reproduction record
 
 ```text

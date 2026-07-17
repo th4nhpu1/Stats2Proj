@@ -1,7 +1,7 @@
 ---
 title: "ASESII 24A02 Project-Based Quiz 1"
-subtitle: "Ridge, Lasso, and Regularization for Neural Features"
-author: "Group 05: [Bùi Trọng Thành - 24125043, Phan Anh Khoa - 24125059, Văn Tuấn Khải - 24125032, Huỳnh Hữu Phúc Minh - 24125068]"
+author: "Group 05: [Bùi Trọng Thành - 24125043, Phan Anh Khoa - 24125059, Văn Tuấn
+  Khải - 24125032, Huỳnh Hữu Phúc Minh - 24125068]"
 date: "`r format(Sys.Date(), '%Y-%m-%d')`"
 output:
   pdf_document:
@@ -12,10 +12,14 @@ output:
   html_document:
     toc: true
     toc_depth: 3
+  word_document:
+    toc: true
+    toc_depth: '3'
+subtitle: Ridge, Lasso, and Regularization for Neural Features
 bibliography: references.bib
 link-citations: true
 params:
-  group_number: 05
+  group_number: 5
 fontsize: 11pt
 geometry: margin=1in
 ---
@@ -165,7 +169,11 @@ safe_condition_numbers <- function(x, lambda, tol = 1e-10) {
 
 ## 1A. Target and predictors
 
+<<<<<<< HEAD
 ```{r data-configuration}
+=======
+```{r data-configuration, eval=TRUE}
+>>>>>>> 28ed05b15f2662cbe996f4d66718c1347d06332b
 config <- if (group_number %% 2L == 1L) {
   list(
     file = "fat.csv",
@@ -209,7 +217,11 @@ Including any outcome-derived variable fundamentally invalidates the prediction 
 
 ## 1B. Split and train-only preprocessing
 
+<<<<<<< HEAD
 ```{r split-and-scale}
+=======
+```{r split-and-scale, eval=TRUE}
+>>>>>>> 28ed05b15f2662cbe996f4d66718c1347d06332b
 
 if (anyNA(analysis_data)) {
   stop("Missing values detected.")
@@ -588,28 +600,108 @@ The empirical results perfectly match our theoretical predictions regarding opti
   Lasso ($L_1$) Match: As predicted, the non-differentiable $L_1$ penalty induced sparsity. The coordinatewise soft-thresholding operator broke the collinearity entirely, assigning the vast majority of the weight to abdom (6.0096) and heavily shrinking the redundant duplicate (0.1054).
 
 # Problem 3. Mathematical mechanisms
-
 ## 3A. Ridge and conditioning
 
-*Write the ridge derivation. Define dimensions and explain uniqueness.*
+Starting from the objective function for ridge regression:
+$$Q_{\lambda}(b)=\frac{1}{2n}||y-Xb||_{2}^{2}+\frac{\lambda}{2}||b||_{2}^{2}$$
 
+<<<<<<< HEAD
 ```{r ridge-conditioning}
 # Use x_train and the fitted ridge lambda.min.
 # safe_condition_numbers(x_train, lambda = ...)
-```
+=======
+We take the derivative of $Q_{\lambda}(b)$ with respect to the coefficient vector $b$:
+$$\nabla_{b}Q_{\lambda}(b)=-\frac{1}{n}X^{\top}(y-Xb)+\lambda b$$
 
+To find the minimizer, we set the gradient to zero:
+$$-\frac{1}{n}X^{\top}y+\frac{1}{n}X^{\top}Xb+\lambda b=0$$
+
+Given the definitions of the Gram matrix $G=\frac{1}{n}X^{\top}X$ and the vector $z=\frac{1}{n}X^{\top}y$, we substitute them into the equation:
+$$-z+Gb+\lambda b=0$$
+$$(G+\lambda I_{p})b=z$$
+
+**Uniqueness explanation:** The Gram matrix $G$ is positive semi-definite. For any penalty parameter $\lambda>0$, the scaled identity matrix $\lambda I_{p}$ is strictly positive definite. Therefore, their sum $(G+\lambda I_{p})$ is always strictly positive definite and invertible. This guarantees that the normal equations have a unique minimizer, given by:
+$$\hat{b}_{ridge}=(G+\lambda I_{p})^{-1}z$$
+
+
+```{r ridge-conditioning}
+# Retrieve lambda.min from the fitted Ridge model in Problem 2B
+ridge_lambda <- ridge_cv$lambda.min 
+
+# Calculate the Gram matrix G = (1/n) * X^T * X
+n <- nrow(x_train)
+G <- (1/n) * t(x_train) %*% x_train
+
+# Extract eigenvalues
+eigenvalues <- eigen(G)$values
+mu_max <- max(eigenvalues)
+mu_min <- min(eigenvalues)
+
+# 1. Unpenalized Condition Number: k2(G)
+# Taking it to be infinite when the smallest eigenvalue is zero up to numerical tolerance
+tol <- 1e-10
+if (mu_min < tol) {
+  kappa_ols <- Inf
+} else {
+  kappa_ols <- mu_max / mu_min
+}
+
+# 2. Penalized Condition Number: k2(G + lambda*I_p)
+kappa_ridge <- (mu_max + ridge_lambda) / (mu_min + ridge_lambda)
+
+# Output the results
+cat(sprintf("Largest Eigenvalue (mu_max): %f\n", mu_max))
+cat(sprintf("Smallest Eigenvalue (mu_min): %f\n", mu_min))
+cat(sprintf("Unpenalized Condition Number k2(G): %f\n", kappa_ols))
+cat(sprintf("Ridge Condition Number k2(G + lambda*I): %f\n", kappa_ridge))
+>>>>>>> 28ed05b15f2662cbe996f4d66718c1347d06332b
+```
+### Explain what changed geometrically and numerically:
+*Numerically*: Extreme multicollinearity among spatial measurements (e.g., weight, abdom, chest) causes the unpenalized design matrix to be ill-conditioned. The smallest eigenvalue $\mu_{min}$ approaches zero, causing the OLS condition number $\kappa_2(G) = \frac{\mu_{max}}{\mu_{min}}$ to explode toward infinity. This ill-conditioning makes matrix inversion highly unstable, resulting in the inflated coefficient variance observed in Problem 2A. By adding the $L_2$ penalty, we shift every eigenvalue strictly upward by $\lambda$. The penalized condition number evaluates to $\frac{\mu_{max} + \lambda}{\mu_{min} + \lambda}$. Because $\lambda > 0$, the denominator is strictly bounded away from zero, which drastically reduces $\kappa_2$ and guarantees a computationally stable matrix inversion.
+*Geometrically*: The eigenvalues of $G$ represent the curvature of the loss function along its principal axes. An eigenvalue near zero indicates that the unpenalized OLS loss surface is an extremely flat, elongated valley. In this flat valley, infinitely many coefficient combinations yield nearly identical training errors, making the optimization highly sensitive to noise. Adding $\lambda I_p$ expands the curvature along all axes by exactly $\lambda$. This geometrically reshapes the flat valley into a strictly convex, well-rounded bowl, ensuring that the optimization perfectly converges to a single, stable, and unique global minimum.
 ## 3B. Lasso optimality and soft thresholding
 
-*Derive the zero/nonzero optimality conditions and the orthonormal-design formula.*
+The objective function for lasso regression is:
+$$R_{\lambda}(b)=\frac{1}{2n}||y-Xb||_{2}^{2}+\lambda||b||_{1}$$
+
+Unlike ridge, the $L_1$ penalty is not differentiable at $b_j = 0$. Therefore, we use subgradients. The optimality condition requires that zero is in the subdifferential of the objective with respect to each coefficient $b_j$:
+$$\frac{\partial}{\partial b_j} \left( \frac{1}{2n}||y-Xb||_{2}^{2} \right) + \lambda \partial |b_j| \ni 0$$
+
+Using $G=\frac{1}{n}X^{\top}X$ and $z=\frac{1}{n}X^{\top}y$, the partial derivative of the loss term is $(Gb)_j - z_j$. The subdifferential of $|b_j|$ is $sign(b_j)$ if $b_j \neq 0$, and the interval $[-1, 1]$ if $b_j = 0$.
+
+**1. Optimality conditions for zero and nonzero coefficients:**
+*   **Nonzero coefficient ($\hat{b}_j \neq 0$):** The condition is an exact equality:
+    $$(G\hat{b})_j - z_j + \lambda \cdot sign(\hat{b}_j) = 0$$
+*   **Zero coefficient ($\hat{b}_j = 0$):** The condition becomes an inequality:
+    $$|(G\hat{b})_j - z_j| \le \lambda$$
+    which means $|z_j - \sum_{k \neq j} G_{jk}\hat{b}_k| \le \lambda$.
+
+**2. Soft-thresholding rule when $G = I_p$:**
+When the design matrix is orthonormal, $G = I_p$. Thus, $(G\hat{b})_j = \hat{b}_j$. The optimality conditions simplify to:
+$$0 \in \hat{b}_j - z_j + \lambda \partial |\hat{b}_j|$$
+*   If $\hat{b}_j > 0$: $\hat{b}_j - z_j + \lambda = 0 \implies \hat{b}_j = z_j - \lambda$ (requires $z_j > \lambda$).
+*   If $\hat{b}_j < 0$: $\hat{b}_j - z_j - \lambda = 0 \implies \hat{b}_j = z_j + \lambda$ (requires $z_j < -\lambda$).
+*   If $\hat{b}_j = 0$: $|z_j| \le \lambda$.
+
+Combining these three cases yields the soft-thresholding rule:
+$$\hat{b}_{j}=sign(z_{j})(|z_{j}|-\lambda)_{+}$$
+
+**3. Why Lasso produces exact zeros compared to Ridge:**
+The lasso optimality condition at $\hat{b}_j = 0$ is a region: the gradient of the unpenalized loss must simply fall within the interval $[-\lambda, \lambda]$. Because this is a wide interval of width $2\lambda$, there is a high probability that the condition is met exactly, pinning the coefficient to absolute zero. 
+In contrast, ridge regression is globally differentiable with a penalty gradient of $\lambda \hat{b}_j$. The ridge optimality condition is $(G + \lambda I_p)\hat{b} = z$. Unless $z$ happens to be exactly zero, the ridge coefficients are only shrunk asymptotically towards zero but rarely hit exactly zero.
 
 ## 3C. Connect algebra to evidence
 
-*Connect one specific numerical result to Problem 3A or 3B.*
+## 3C. Connect algebra to evidence
+We choose the ridge regression tuning result from Problem 2B ($\lambda_{min} = 0.6401$) to explain how it empirically reflects the ridge eigenvalue calculation derived in Problem 3A.
+
+In Problem 3A, we established algebraically that the $L_2$ penalty rescues an ill-conditioned Gram matrix by shifting all of its eigenvalues strictly upward by $\lambda$. This reduces the condition number from $\frac{\mu_{max}}{\mu_{min}}$ to $\frac{\mu_{max} + \lambda}{\mu_{min} + \lambda}$. 
+
+Our numerical outputs directly demonstrate this mathematical mechanism. Due to extreme multicollinearity among the spatial body measurements, the unpenalized OLS matrix yielded a near-zero minimum eigenvalue ($\mu_{min} \approx 0.0236$) and a dangerously inflated condition number of $\kappa_2(G) \approx 373.58$. However, when the model applies the optimal ridge penalty ($\lambda_{min} = 0.6401$) identified via cross-validation in Problem 2B, this specific value acts as the algebraic shift. The denominator of the condition number becomes bounded away from zero ($0.0236 + 0.6401 = 0.6637$). By injecting the optimal penalty from Problem 2B into the eigenvalue calculation, the condition number drastically collapses to $\approx 14.27$. This specific numerical change empirically proves how the ridge penalty safely regularizes matrix inversion and prevents the inflated variance seen in unpenalized regression.
 
 # Problem 4. Elastic net and a neural-feature bridge
 
 ## 4A. Research question and source map
-
 **Research direction:** Weight Decay ($\ell_2$ Regularization Link in Deep Learning)
 
 | Claim | Exact primary source and locator | What it establishes | What it does not establish |
@@ -806,7 +898,7 @@ kable(holdout, digits = 4, row.names = FALSE,
 *Distinguish penalty, weight decay, output-weight sparsity, pruning, dropout, and a trained deep network. Cite the sources from 4A and discuss at least two limitations.*
 
 # Problem 5. Report quality and reproducibility
-
+  
 ## 5A. Reproduction record
 
 ```text

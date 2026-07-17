@@ -168,12 +168,7 @@ safe_condition_numbers <- function(x, lambda, tol = 1e-10) {
 # Problem 1. Prediction design and leakage control
 
 ## 1A. Target and predictors
-
-<<<<<<< HEAD
 ```{r data-configuration}
-=======
-```{r data-configuration, eval=TRUE}
->>>>>>> 28ed05b15f2662cbe996f4d66718c1347d06332b
 config <- if (group_number %% 2L == 1L) {
   list(
     file = "fat.csv",
@@ -216,12 +211,7 @@ Required Exclusions & Leakage Justification: We are required to explicitly exclu
 Including any outcome-derived variable fundamentally invalidates the prediction task by introducing target leakage. If included, the regularized models would not learn a generalized statistical relationship from anatomical features; instead, they would merely reverse-engineer a deterministic algebraic formula, rendering any comparison of OLS, ridge, and lasso meaningless.
 
 ## 1B. Split and train-only preprocessing
-
-<<<<<<< HEAD
 ```{r split-and-scale}
-=======
-```{r split-and-scale, eval=TRUE}
->>>>>>> 28ed05b15f2662cbe996f4d66718c1347d06332b
 
 if (anyNA(analysis_data)) {
   stop("Missing values detected.")
@@ -604,12 +594,6 @@ The empirical results perfectly match our theoretical predictions regarding opti
 
 Starting from the objective function for ridge regression:
 $$Q_{\lambda}(b)=\frac{1}{2n}||y-Xb||_{2}^{2}+\frac{\lambda}{2}||b||_{2}^{2}$$
-
-<<<<<<< HEAD
-```{r ridge-conditioning}
-# Use x_train and the fitted ridge lambda.min.
-# safe_condition_numbers(x_train, lambda = ...)
-=======
 We take the derivative of $Q_{\lambda}(b)$ with respect to the coefficient vector $b$:
 $$\nabla_{b}Q_{\lambda}(b)=-\frac{1}{n}X^{\top}(y-Xb)+\lambda b$$
 
@@ -654,7 +638,6 @@ cat(sprintf("Largest Eigenvalue (mu_max): %f\n", mu_max))
 cat(sprintf("Smallest Eigenvalue (mu_min): %f\n", mu_min))
 cat(sprintf("Unpenalized Condition Number k2(G): %f\n", kappa_ols))
 cat(sprintf("Ridge Condition Number k2(G + lambda*I): %f\n", kappa_ridge))
->>>>>>> 28ed05b15f2662cbe996f4d66718c1347d06332b
 ```
 ### Explain what changed geometrically and numerically:
 *Numerically*: Extreme multicollinearity among spatial measurements (e.g., weight, abdom, chest) causes the unpenalized design matrix to be ill-conditioned. The smallest eigenvalue $\mu_{min}$ approaches zero, causing the OLS condition number $\kappa_2(G) = \frac{\mu_{max}}{\mu_{min}}$ to explode toward infinity. This ill-conditioning makes matrix inversion highly unstable, resulting in the inflated coefficient variance observed in Problem 2A. By adding the $L_2$ penalty, we shift every eigenvalue strictly upward by $\lambda$. The penalized condition number evaluates to $\frac{\mu_{max} + \lambda}{\mu_{min} + \lambda}$. Because $\lambda > 0$, the denominator is strictly bounded away from zero, which drastically reduces $\kappa_2$ and guarantees a computationally stable matrix inversion.

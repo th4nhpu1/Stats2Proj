@@ -674,8 +674,6 @@ The lasso optimality condition at $\hat{b}_j = 0$ is a region: the gradient of t
 In contrast, ridge regression is globally differentiable with a penalty gradient of $\lambda \hat{b}_j$. The ridge optimality condition is $(G + \lambda I_p)\hat{b} = z$. Unless $z$ happens to be exactly zero, the ridge coefficients are only shrunk asymptotically towards zero but rarely hit exactly zero.
 
 ## 3C. Connect algebra to evidence
-
-## 3C. Connect algebra to evidence
 We choose the ridge regression tuning result from Problem 2B ($\lambda_{min} = 0.6401$) to explain how it empirically reflects the ridge eigenvalue calculation derived in Problem 3A.
 
 In Problem 3A, we established algebraically that the $L_2$ penalty rescues an ill-conditioned Gram matrix by shifting all of its eigenvalues strictly upward by $\lambda$. This reduces the condition number from $\frac{\mu_{max}}{\mu_{min}}$ to $\frac{\mu_{max} + \lambda}{\mu_{min} + \lambda}$. 
@@ -693,9 +691,6 @@ Our numerical outputs directly demonstrate this mathematical mechanism. Due to e
 | Standard $\ell_2$ regularization and true weight decay are not equivalent when paired with modern adaptive gradient optimizers, requiring an explicit decoupling of the decay step. | Loshchilov \& Hutter (2017), *International Conference on Learning Representations (ICLR)*, Section 3, Algorithm 2. | Establishes that for adaptive gradient algorithms (such as Adam), traditional $\ell_2$ regularization fails to regularize correctly, and the weight decay step must be explicitly decoupled from the gradient updates (creating the AdamW optimizer) to restore generalization benefits. | Does not prove a unique optimization path for non-convex loss surfaces, nor does it permanently drive weak network weights to absolute zero for network compression.|
 
 ## 4B. Elastic net on original predictors
-
-# Fit one cv.glmnet object per alpha with the same foldid.
-# Select alpha and lambda using training CV only.
 
 ```{r original-elastic-net, fig.height=4}
 alpha_grid <- c(0.10, 0.25, 0.50, 0.75, 0.90)
@@ -765,12 +760,6 @@ cat("Nonzeros  -> ridge:", sum(abs(bridge) > 1e-8), "| enet:", sum(abs(b_enet) >
 ```
 
 ## 4C. Fixed ReLU features
-
-# TODO:
-# 1. Generate A and bias once from seeds$features using the stated distributions.
-# 2. Apply the same A and bias to x_train and x_test.
-# 3. Fit a scaler to H_train only and apply it to H_test.
-# 4. Fit ridge, lasso, and elastic net on H_train with the shared foldid.
 
 ```{r random-relu-features, fig.height=4}
 relu <- function(z) pmax(z, 0)
@@ -847,9 +836,6 @@ In this experiment, the input-to-hidden weights (matrix $A$) and the hidden bias
 > *   **Nominated deployment model**: Lasso at `lambda.1se` on the original predictors (as justified in Section 2D).
 > *   **Metrics**: RMSE and MAE.
 
-# This must be the first analysis chunk that uses y_test for evaluation.
-# Generate all fixed candidate predictions and one RMSE/MAE table here.
-
 ```{r final-holdout-evaluation}
 # FIRST AND ONLY CHUNK THAT USES y_test. 
 # Evaluated strictly once without any subsequent tuning to preserve holdout validity.
@@ -881,8 +867,6 @@ holdout <- do.call(rbind, Map(function(nm, pr) {
 kable(holdout, digits = 4, row.names = FALSE,
       caption = "Final holdout performance (n_test = 51). Computed once; no retuning follows.")
 ```
-
-**Holdout Evidence Evaluation:**
 
 **Holdout Evidence Evaluation:**
 The holdout evidence supports our predeclared choice. The nominated Lasso `lambda.1se` model achieved an RMSE of 4.4070. While this error is slightly higher than the best-performing Elastic net on ReLU features (RMSE 4.1310) and the unpenalized OLS (RMSE 4.1698), the tradeoff is entirely justified. Lasso `lambda.1se` successfully reduced the model to exactly 5 non-redundant predictors, maintaining strict clinical interpretability and structural stability without suffering a severe loss in predictive accuracy compared to the highly complex, 200-feature ReLU models.

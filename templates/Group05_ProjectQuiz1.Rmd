@@ -1,7 +1,11 @@
 ---
 title: "ASESII 24A02 Project-Based Quiz 1"
-author: "Group 05: [Bùi Trọng Thành - 24125043, Phan Anh Khoa - 24125059, Văn Tuấn
-  Khải - 24125032, Huỳnh Hữu Phúc Minh - 24125068]"
+author:
+  - "Group 05:"
+  - "Bùi Trọng Thành (24125043)"
+  - "Phan Anh Khoa (24125059)"
+  - "Văn Tuấn Khải (24125032)"
+  - "Huỳnh Hữu Phúc Minh (24125068)"
 date: "`r format(Sys.Date(), '%Y-%m-%d')`"
 output:
   pdf_document:
@@ -27,20 +31,34 @@ geometry: margin=1in
 
 # Authorship and contribution statement {-}
 
-We confirm that every group member can explain the submitted analysis. AI use is reported in `GroupXX_AI_Log.csv`, and the group checked every AI-assisted item used in this report.
+We confirm that every group member can explain the submitted analysis. AI use is reported in section 5C of this report, and the group checked every AI-assisted item used in this report.
 
-| Student | ID | Main contributions | Verification performed |
-|---|---|---|---|
-| [Name] | [ID] | [Work] | [Check] |
+| Student | Student ID | Main Contributions | Verification Performed |
+|---------|-----------|---------------------|-------------------------|
+| Thanh | [ID] | Prediction design, leakage control safeguards (P1), and OLS/Ridge baseline training (P2A–2B). | Audited the fixed ReLU feature generation and Elastic Net cross-validation (P4) to confirm fixed vs. learned parameters. |
+| Khoa | [ID] | Lasso optimization, perturbation checks (P2C–2E), and theoretical mechanism derivations (P3). | Validated the 80/20 splitting logic and ensured strict separation of test responses (P1). |
+| Minh | [ID] | Elastic net tuning and implementation of the fixed non-linear ReLU feature representation (P4A–4C). | Verified the exact coordinatewise optimality conditions and eigenvalue conditioning κ₂(G+λI_p) (P3). |
+| Khai | [ID] | Deep learning literature synthesis (P4E), locked holdout evaluation (P4D), and reproducible setup (P5). | Reviewed all cross-validation folds (foldid) for consistency across OLS, Ridge, and Lasso (P2). |
 
 # Abstract {-}
 
-*Maximum 150 words: prediction problem, methods, main evidence, and recommendation.*
+This study evaluates regularized regression (Ridge, Lasso, Elastic Net) to predict body fat percentage (brozek) from anatomical measurements. We compare classical $L_1$ and $L_2$ penalties against a fixed 200-dimensional ReLU feature space, establishing a controlled bridge to neural architectures. Uncompromising data hygiene was maintained via a locked $80/20$ split and training-exclusive scaling. While unpenalized OLS yielded a dangerously ill-conditioned Gram matrix, regularization stabilized the eigenvalue conditioning $\kappa_2(G+\lambda I_p)$. Despite the Elastic Net ReLU model achieving the lowest holdout RMSE (4.1310), we recommend deploying Lasso at lambda.1se (RMSE 4.4070). Its coordinatewise soft-thresholding mechanism aggressively broke multicollinearity, isolating exactly five fundamental clinical predictors. This yields an optimally stable, highly interpretable model. Limitations include the ReLU representation's high variance to stochastic initialization and its fundamental lack of gradient flow for hierarchical learning
 
 # Reproducible setup {-}
 
 ```{r setup, message=FALSE, warning=FALSE}
-knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = TRUE)
+knitr::opts_chunk$set(width = 60)
+
+# In setup chunk:
+hook_output <- knitr::knit_hooks$get("output")
+knitr::knit_hooks$set(output = function(x, options) {
+  if (!is.null(n <- options$linewidth)) {
+    x <- knitr:::split_lines(x)
+    if (any(nchar(x) > n)) x <- strwrap(x, width = n)
+    x <- paste(x, collapse = "\n")
+  }
+  hook_output(x, options)
+})
 required_packages <- c("tidyverse", "glmnet", "broom", "knitr")
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
@@ -54,6 +72,7 @@ library(tidyverse)
 library(glmnet)
 library(broom)
 library(knitr)
+library(tibble)
 
 group_number <- as.integer(params$group_number)
 if (length(group_number) != 1L || is.na(group_number) || group_number < 1L) {
@@ -270,7 +289,8 @@ print(p_dist)
 cor_matrix <- cor(train_data)
 cor_with_target <- sort(abs(cor_matrix[, "brozek"]), decreasing = TRUE)
 knitr::kable(head(cor_with_target, 6), 
-             col.names = c("Absolute Correlation with Brozek"), digits = 3,
+             col.names = c("Absolute Correlation with Brozek"), 
+             digits = 3,
              caption = "Top Correlated Predictors (Training Set)")
 
 # 3. Anomaly Detection
@@ -394,7 +414,8 @@ plot(ridge_cv)
 title("Ridge CV Error", line = 2.5)
 
 plot(ridge_cv$glmnet.fit, xvar = "lambda", label = TRUE)
-abline(v = log(c(ridge_lambda_min, ridge_lambda_1se)), lty = 2, col = c("blue", "red"))
+abline(v = log(c(ridge_lambda_min, ridge_lambda_1se)), 
+       lty = 2, col = c("blue", "red"))
 title("Ridge Coefficient Paths", line = 2.5)
 par(mfrow = c(1, 1))
 ```
@@ -439,10 +460,12 @@ lasso_active_1se <- get_active_features(lasso_cv, "lambda.1se")
 # 4. Formatted output for the RMarkdown report
 cat(sprintf("lambda.min: %.4f (CV MSE: %.4f)\n", lasso_lambda_min, lasso_err_min))
 cat("Active predictors (lambda.min):\n", 
-    paste(strwrap(paste(lasso_active_min, collapse = ", "), width = 70), collapse = "\n"), "\n\n")
+    paste(strwrap(paste(lasso_active_min, collapse = ", "), width = 70), 
+          collapse = "\n"), "\n\n")
 cat(sprintf("lambda.1se: %.4f (CV MSE: %.4f)\n", lasso_lambda_1se, lasso_err_1se))
 cat("Active predictors (lambda.1se):\n", 
-    paste(strwrap(paste(lasso_active_1se, collapse = ", "), width = 70), collapse = "\n"), "\n")
+    paste(strwrap(paste(lasso_active_1se, collapse = ", "), width = 70), 
+          collapse = "\n"), "\n")
 
 # 5. Visualizations
 par(mfrow = c(1, 2))
@@ -451,7 +474,8 @@ plot(lasso_cv)
 title("Lasso CV Error", line = 2.5)
 
 plot(lasso_cv$glmnet.fit, xvar = "lambda", label = TRUE)
-abline(v = log(c(lasso_lambda_min, lasso_lambda_1se)), lty = 2, col = c("blue", "red"))
+abline(v = log(c(lasso_lambda_min, lasso_lambda_1se)), lty = 2, 
+       col = c("blue", "red"))
 title("Lasso Coefficient Paths", line = 2.5)
 
 par(mfrow = c(1, 1))
@@ -500,7 +524,8 @@ get_l2_norm <- function(fit, s = NULL) {
 # Compile the comparison table
 comparison_table <- tibble::tibble(
   Model = c("OLS", "Ridge", "Ridge", "Lasso", "Lasso"),
-  `Tuning Rule` = c("Unpenalized", "lambda.min", "lambda.1se", "lambda.min", "lambda.1se"),
+  `Tuning Rule` = c("Unpenalized", "lambda.min", "lambda.1se", 
+                    "lambda.min", "lambda.1se"),
   `CV MSE` = c(
     ols_cv_mse, 
     ridge_err_min, 
@@ -563,8 +588,10 @@ noise <- rnorm(nrow(x_train), mean = 0, sd = 0.01)
 x_train_perturbed <- cbind(x_train, perturbed_var = x_train[, target_col] + noise)
 
 # Fit Ridge and Lasso on the strictly locked perturbed training data
-ridge_pert <- fit_cv_glmnet(x = x_train_perturbed, y = y_train, alpha = 0, foldid = foldid)
-lasso_pert <- fit_cv_glmnet(x = x_train_perturbed, y = y_train, alpha = 1, foldid = foldid)
+ridge_pert <- fit_cv_glmnet(x = x_train_perturbed, y = y_train, 
+                            alpha = 0, foldid = foldid)
+lasso_pert <- fit_cv_glmnet(x = x_train_perturbed, y = y_train, 
+                            alpha = 1, foldid = foldid)
 
 # Extract coefficients at the strictly regularized lambda.1se threshold
 ridge_coefs_pert <- as.vector(stats::coef(ridge_pert, s = "lambda.1se"))
@@ -624,7 +651,8 @@ mu_max <- max(eigenvalues)
 mu_min <- min(eigenvalues)
 
 # 1. Unpenalized Condition Number: k2(G)
-# Taking it to be infinite when the smallest eigenvalue is zero up to numerical tolerance
+# Taking it to be infinite when the smallest eigenvalue is zero 
+# up to numerical tolerance
 tol <- 1e-10
 if (mu_min < tol) {
   kappa_ols <- Inf
@@ -644,6 +672,7 @@ cat(sprintf("Ridge Condition Number k2(G + lambda*I): %f\n", kappa_ridge))
 ### Explain what changed geometrically and numerically:
 *Numerically*: Extreme multicollinearity among spatial measurements (e.g., weight, abdom, chest) causes the unpenalized design matrix to be ill-conditioned. The smallest eigenvalue $\mu_{min}$ approaches zero, causing the OLS condition number $\kappa_2(G) = \frac{\mu_{max}}{\mu_{min}}$ to explode toward infinity. This ill-conditioning makes matrix inversion highly unstable, resulting in the inflated coefficient variance observed in Problem 2A. By adding the $L_2$ penalty, we shift every eigenvalue strictly upward by $\lambda$. The penalized condition number evaluates to $\frac{\mu_{max} + \lambda}{\mu_{min} + \lambda}$. Because $\lambda > 0$, the denominator is strictly bounded away from zero, which drastically reduces $\kappa_2$ and guarantees a computationally stable matrix inversion.
 *Geometrically*: The eigenvalues of $G$ represent the curvature of the loss function along its principal axes. An eigenvalue near zero indicates that the unpenalized OLS loss surface is an extremely flat, elongated valley. In this flat valley, infinitely many coefficient combinations yield nearly identical training errors, making the optimization highly sensitive to noise. Adding $\lambda I_p$ expands the curvature along all axes by exactly $\lambda$. This geometrically reshapes the flat valley into a strictly convex, well-rounded bowl, ensuring that the optimization perfectly converges to a single, stable, and unique global minimum.
+
 ## 3B. Lasso optimality and soft thresholding
 
 The objective function for lasso regression is:
@@ -676,6 +705,7 @@ The lasso optimality condition at $\hat{b}_j = 0$ is a region: the gradient of t
 In contrast, ridge regression is globally differentiable with a penalty gradient of $\lambda \hat{b}_j$. The ridge optimality condition is $(G + \lambda I_p)\hat{b} = z$. Unless $z$ happens to be exactly zero, the ridge coefficients are only shrunk asymptotically towards zero but rarely hit exactly zero.
 
 ## 3C. Connect algebra to evidence
+
 We choose the ridge regression tuning result from Problem 2B ($\lambda_{min} = 0.6401$) to explain how it empirically reflects the ridge eigenvalue calculation derived in Problem 3A.
 
 In Problem 3A, we established algebraically that the $L_2$ penalty rescues an ill-conditioned Gram matrix by shifting all of its eigenvalues strictly upward by $\lambda$. This reduces the condition number from $\frac{\mu_{max}}{\mu_{min}}$ to $\frac{\mu_{max} + \lambda}{\mu_{min} + \lambda}$. 
@@ -724,8 +754,18 @@ enet_summary <- do.call(rbind, Map(function(a, fit) {
 }, alpha_grid, cv_enet_list))
 enet_summary$cv_rmse_min <- sqrt(enet_summary$cv_mse_min)
 
-kable(enet_summary, digits = 4, row.names = FALSE,
-      caption = "Elastic net over the alpha grid (shared folds, lambda tuned within each alpha)")
+enet_table <- enet_summary |>
+  column_to_rownames("alpha") |>
+  t()
+
+kable(
+  enet_table,
+  digits = 4,
+  row.names = TRUE,
+  col.names = colnames(enet_table),
+  caption = "Elastic net over the alpha grid",
+  align = c("r", rep("c", ncol(enet_table)))
+)
 
 # SELECTION RULE: minimum CV MSE across the (alpha, lambda.min) grid.
 best_i     <- which.min(enet_summary$cv_mse_min)
@@ -737,12 +777,14 @@ cat("Selected alpha =", enet_alpha, "| lambda =", enet_lam,
     "| CV MSE =", enet_summary$cv_mse_min[best_i], "\n")
 
 # CV curve at the selected alpha
-plot(cv_enet); title(paste0("Elastic net CV curve (alpha = ", enet_alpha, ")"), line = 2.5)
+plot(cv_enet); title(paste0("Elastic net CV curve (alpha = ", enet_alpha, ")"), 
+                     line = 2.5)
 
 # Coefficient path at the selected alpha
 enet_path <- glmnet(x_train, y_train, alpha = enet_alpha, standardize = FALSE)
 plot(enet_path, xvar = "lambda", label = TRUE)
-title(paste0("Elastic net coefficient paths (alpha = ", enet_alpha, ")"), line = 2.5)
+title(paste0("Elastic net coefficient paths (alpha = ", enet_alpha, ")"), 
+      line = 2.5)
 abline(v = log(enet_lam), lty = 2)
 
 # Nonzero slopes at the selected pair
@@ -763,7 +805,8 @@ kable(data.frame(predictor = names(bridge), ridge = bridge,
 
 cat("L2 norms  -> ridge:", sqrt(sum(bridge^2)), "| enet:", sqrt(sum(b_enet^2)),
     "| lasso:", sqrt(sum(blasso^2)), "\n")
-cat("Nonzeros  -> ridge:", sum(abs(bridge) > 1e-8), "| enet:", sum(abs(b_enet) > 1e-8),
+cat("Nonzeros  -> ridge:", sum(abs(bridge) > 1e-8), "| enet:", 
+    sum(abs(b_enet) > 1e-8),
     "| lasso:", sum(abs(blasso) > 1e-8), "\n")
 ```
 
@@ -801,7 +844,8 @@ cv_h_lasso <- fit_cv_glmnet(H_train, y_train, alpha = 1, foldid = foldid)
 cv_h_enet_list <- lapply(alpha_grid, function(a) {
   fit_cv_glmnet(H_train, y_train, alpha = a, foldid = foldid)
 })
-h_enet_cv <- vapply(cv_h_enet_list, function(f) f$cvm[match(f$lambda.min, f$lambda)], numeric(1))
+h_enet_cv <- vapply(cv_h_enet_list, function(f) f$cvm[match(f$lambda.min, f$lambda)], 
+                    numeric(1))
 h_best_i    <- which.min(h_enet_cv)
 h_enet_alpha <- alpha_grid[h_best_i]
 cv_h_enet    <- cv_h_enet_list[[h_best_i]]
@@ -809,7 +853,8 @@ cv_h_enet    <- cv_h_enet_list[[h_best_i]]
 feature_summary <- data.frame(
   model = c("Ridge (ReLU)", "Lasso (ReLU)",
             paste0("Elastic net (ReLU, alpha = ", h_enet_alpha, ")")),
-  lambda.min = c(cv_h_ridge$lambda.min, cv_h_lasso$lambda.min, cv_h_enet$lambda.min),
+  lambda.min = c(cv_h_ridge$lambda.min, cv_h_lasso$lambda.min, 
+                 cv_h_enet$lambda.min),
   cv_mse = c(cv_h_ridge$cvm[match(cv_h_ridge$lambda.min, cv_h_ridge$lambda)],
              cv_h_lasso$cvm[match(cv_h_lasso$lambda.min, cv_h_lasso$lambda)],
              cv_h_enet$cvm[match(cv_h_enet$lambda.min, cv_h_enet$lambda)]),
@@ -855,14 +900,22 @@ ols_test <- predict(ols_fit, newdata = data.frame(x_test))
 # Note: Variables are explicitly matched to ridge_cv, lasso_cv, and cv_enet
 pred_table <- list(
   "OLS"                          = ols_test,
-  "Ridge (lambda.min)"           = as.numeric(predict(ridge_cv, newx = x_test, s = "lambda.min")),
-  "Ridge (lambda.1se)"           = as.numeric(predict(ridge_cv, newx = x_test, s = "lambda.1se")),
-  "Lasso (lambda.min)"           = as.numeric(predict(lasso_cv, newx = x_test, s = "lambda.min")),
-  "Lasso (lambda.1se)"           = as.numeric(predict(lasso_cv, newx = x_test, s = "lambda.1se")),
-  "Elastic net (original)"       = as.numeric(predict(cv_enet, newx = x_test, s = "lambda.min")),
-  "Ridge (ReLU features)"        = as.numeric(predict(cv_h_ridge, newx = H_test, s = "lambda.min")),
-  "Lasso (ReLU features)"        = as.numeric(predict(cv_h_lasso, newx = H_test, s = "lambda.min")),
-  "Elastic net (ReLU features)"  = as.numeric(predict(cv_h_enet,  newx = H_test, s = "lambda.min"))
+  "Ridge (lambda.min)"           = as.numeric(predict(ridge_cv, newx = x_test, 
+                                                      s = "lambda.min")),
+  "Ridge (lambda.1se)"           = as.numeric(predict(ridge_cv, newx = x_test, 
+                                                      s = "lambda.1se")),
+  "Lasso (lambda.min)"           = as.numeric(predict(lasso_cv, newx = x_test, 
+                                                      s = "lambda.min")),
+  "Lasso (lambda.1se)"           = as.numeric(predict(lasso_cv, newx = x_test, 
+                                                      s = "lambda.1se")),
+  "Elastic net (original)"       = as.numeric(predict(cv_enet, newx = x_test, 
+                                                      s = "lambda.min")),
+  "Ridge (ReLU features)"        = as.numeric(predict(cv_h_ridge, newx = H_test, 
+                                                      s = "lambda.min")),
+  "Lasso (ReLU features)"        = as.numeric(predict(cv_h_lasso, newx = H_test, 
+                                                      s = "lambda.min")),
+  "Elastic net (ReLU features)"  = as.numeric(predict(cv_h_enet,  newx = H_test, 
+                                                      s = "lambda.min"))
 )
 
 # 3. Calculate regression metrics (RMSE, MAE) across the prediction array
@@ -899,17 +952,48 @@ The random ReLU feature matrix deployed in Section 4C functions as a fixed kerne
 
 # Problem 5. Report quality and reproducibility
   
+
 ## 5A. Reproduction record
 
-```text
-1. Open a clean R session.
-2. [Exact commands and folder layout.]
-3. Render GroupXX_ProjectQuiz1.Rmd.
-```
+**1. Directory Structure & Relative Paths**
+To guarantee that the relative paths in the `find_exam_data()` helper function resolve correctly, extract the submission archive into a single working directory containing the following exact structure:
+
+    ASESII_24A02_ProjectQuiz1_Group05/
+    ├── Group05_ProjectQuiz1.Rmd
+    ├── Group05_ProjectQuiz1.pdf
+    ├── references.bib
+    ├── README.txt
+    └── data/
+        └── fat.csv
+
+**2. Clean Environment Initialization**
+1. Launch a completely clean R session (e.g., by opening a new RStudio Project in the `ASESII_24A02_ProjectQuiz1_Group05` directory). Do not load any previous `.RData` workspaces. 
+2. Ensure the strictly required packages (`tidyverse`, `glmnet`, `broom`, `knitr`) are installed. 
+3. Execute the rendering process via the console: `rmarkdown::render("Group05_ProjectQuiz1.Rmd")` or by using the RStudio "Knit" button. 
+4. The environment snapshot, including package versions and system information, is automatically appended to the end of this report via `sessionInfo()`.
+
+**3. Locked Holdout Declaration (Data Hygiene)**
+Data leakage controls were strictly enforced throughout this pipeline. The test responses (`y_test`) do not enter the computational environment during data splitting (1B), OLS/Ridge/Lasso training (Problem 2), or the Elastic Net and fixed ReLU feature generation (Problem 4A–4C). 
+
+The holdout responses **first enter the computation exclusively in Problem 4D** (inside the `final-holdout-evaluation` chunk), where they are used strictly once to evaluate the pre-declared, locked core models for the terminal RMSE and MAE calculations.
 
 ## 5B. Recommendation and limitations
 
-*Give the final recommendation, distinguish prediction from interpretation, and state limitations.*
+**Deployment Recommendation**
+We recommend deploying the **Lasso model tuned at `lambda.1se`**.
+
+*   **Empirical Evidence:** On the locked holdout set, this model achieved an RMSE of 4.4070. Interpreted on the correct scale, this means our model's predictions deviate from a patient's true body fat percentage by approximately 4.41 percentage points on average. While the Elastic Net ReLU model achieved a slightly lower empirical error (RMSE 4.1310), the Lasso model trades a marginal 0.27 percentage point increase in error for a massive gain in structural simplicity. 
+*   **Mathematical Justification:** This simplicity is not an empirical accident. The non-differentiable $L_1$ penalty induces coordinatewise soft-thresholding, which mathematically forces the coefficients of redundant, collinear features (like overall weight) to exactly zero. This isolates a diagnostic equation relying on exactly 5 fundamental anatomical measurements, providing a stable, strictly interpretable model.
+
+**Methodological Limitations**
+
+1. **Stochastic Initialization Variance:** The non-linear ReLU feature space (Problem 4) functions as a randomized kernel projection. Because the projection matrix $A$ and bias vector $c$ are frozen based on a single random seed, the resulting feature space is highly unoptimized, causing the final evaluation metrics to carry high variance dependent on that initialization.
+
+
+2. **Absence of Gradient Flow:** Unlike the attention mechanisms or hierarchical layers in fully trained neural architectures (such as Transformers), our fixed-feature model cannot backpropagate error signals. It cannot adapt its internal representations to better isolate variance in body fat, strictly limiting its representational capacity.
+
+
+3. **Holdout Sample Size Constraints:** Our uncompromising $80/20$ data leakage control yielded a holdout set of only $n=51$ observations. The observed performance differences between the top penalized models may not represent a statistically significant difference in true generalization error over a larger population.
 
 ## 5C. AI verification record
 | AI-assisted item | How it was checked | Evidence | Modification or rejection |

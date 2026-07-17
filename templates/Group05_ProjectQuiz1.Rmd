@@ -606,26 +606,50 @@ $$(G+\lambda I_{p})b=z$$
 **Uniqueness explanation:** The Gram matrix $G$ is positive semi-definite. For any penalty parameter $\lambda>0$, the scaled identity matrix $\lambda I_{p}$ is strictly positive definite. Therefore, their sum $(G+\lambda I_{p})$ is always strictly positive definite and invertible. This guarantees that the normal equations have a unique minimizer, given by:
 $$\hat{b}_{ridge}=(G+\lambda I_{p})^{-1}z$$
 
+
 ```{r ridge-conditioning}
-# Note: ridge_lambda_min must be retrieved from Problem 2B results.
-ridge_lambda_min <- 0.6401 
+# Retrieve lambda.min from the fitted Ridge model in Problem 2B
+ridge_lambda <- ridge_cv$lambda.min 
 
-cond_metrics <- safe_condition_numbers(x_train, lambda = ridge_lambda_min)
-print(cond_metrics)
+# Calculate the Gram matrix G = (1/n) * X^T * X
+n <- nrow(x_train)
+G <- (1/n) * t(x_train) %*% x_train
 
-## ```{r ridge-conditioning, eval=FALSE}
-# Use x_train and the fitted ridge lambda.min.
-# safe_condition_numbers(x_train, lambda = ...)
+# Extract eigenvalues
+eigenvalues <- eigen(G)$values
+mu_max <- max(eigenvalues)
+mu_min <- min(eigenvalues)
+
+# 1. Unpenalized Condition Number: k2(G)
+# Taking it to be infinite when the smallest eigenvalue is zero up to numerical tolerance
+tol <- 1e-10
+if (mu_min < tol) {
+  kappa_ols <- Inf
+} else {
+  kappa_ols <- mu_max / mu_min
+}
+
+# 2. Penalized Condition Number: k2(G + lambda*I_p)
+kappa_ridge <- (mu_max + ridge_lambda) / (mu_min + ridge_lambda)
+
+# Output the results
+cat(sprintf("Largest Eigenvalue (mu_max): %f\n", mu_max))
+cat(sprintf("Smallest Eigenvalue (mu_min): %f\n", mu_min))
+cat(sprintf("Unpenalized Condition Number k2(G): %f\n", kappa_ols))
+cat(sprintf("Ridge Condition Number k2(G + lambda*I): %f\n", kappa_ridge))
 ```
+### Explain what changed geometrically and numerically:
+*Numerically*: Extreme multicollinearity among spatial measurements (e.g., weight, abdom, chest) causes the unpenalized design matrix to be ill-conditioned. The smallest eigenvalue $\mu_{min}$ approaches zero, causing the OLS condition number $\kappa_2(G) = \frac{\mu_{max}}{\mu_{min}}$ to explode toward infinity. This ill-conditioning makes matrix inversion highly unstable, resulting in the inflated coefficient variance observed in Problem 2A. By adding the $L_2$ penalty, we shift every eigenvalue strictly upward by $\lambda$. The penalized condition number evaluates to $\frac{\mu_{max} + \lambda}{\mu_{min} + \lambda}$. Because $\lambda > 0$, the denominator is strictly bounded away from zero, which drastically reduces $\kappa_2$ and guarantees a computationally stable matrix inversion.
+*Geometrically*: The eigenvalues of $G$ represent the curvature of the loss function along its principal axes. An eigenvalue near zero indicates that the unpenalized OLS loss surface is an extremely flat, elongated valley. In this flat valley, infinitely many coefficient combinations yield nearly identical training errors, making the optimization highly sensitive to noise. Adding $\lambda I_p$ expands the curvature along all axes by exactly $\lambda$. This geometrically reshapes the flat valley into a strictly convex, well-rounded bowl, ensuring that the optimization perfectly converges to a single, stable, and unique global minimum.
 ## 3B. Lasso optimality and soft thresholding
 
-The objective function for lasso regression is[cite: 1]:
+The objective function for lasso regression is:
 $$R_{\lambda}(b)=\frac{1}{2n}||y-Xb||_{2}^{2}+\lambda||b||_{1}$$
 
 Unlike ridge, the $L_1$ penalty is not differentiable at $b_j = 0$. Therefore, we use subgradients. The optimality condition requires that zero is in the subdifferential of the objective with respect to each coefficient $b_j$:
 $$\frac{\partial}{\partial b_j} \left( \frac{1}{2n}||y-Xb||_{2}^{2} \right) + \lambda \partial |b_j| \ni 0$$
 
-Using $G=\frac{1}{n}X^{\top}X$ and $z=\frac{1}{n}X^{\top}y$[cite: 1], the partial derivative of the loss term is $(Gb)_j - z_j$. The subdifferential of $|b_j|$ is $sign(b_j)$ if $b_j \neq 0$, and the interval $[-1, 1]$ if $b_j = 0$.
+Using $G=\frac{1}{n}X^{\top}X$ and $z=\frac{1}{n}X^{\top}y$, the partial derivative of the loss term is $(Gb)_j - z_j$. The subdifferential of $|b_j|$ is $sign(b_j)$ if $b_j \neq 0$, and the interval $[-1, 1]$ if $b_j = 0$.
 
 **1. Optimality conditions for zero and nonzero coefficients:**
 *   **Nonzero coefficient ($\hat{b}_j \neq 0$):** The condition is an exact equality:
@@ -641,19 +665,21 @@ $$0 \in \hat{b}_j - z_j + \lambda \partial |\hat{b}_j|$$
 *   If $\hat{b}_j < 0$: $\hat{b}_j - z_j - \lambda = 0 \implies \hat{b}_j = z_j + \lambda$ (requires $z_j < -\lambda$).
 *   If $\hat{b}_j = 0$: $|z_j| \le \lambda$.
 
-Combining these three cases yields the soft-thresholding rule[cite: 1]:
+Combining these three cases yields the soft-thresholding rule:
 $$\hat{b}_{j}=sign(z_{j})(|z_{j}|-\lambda)_{+}$$
 
 **3. Why Lasso produces exact zeros compared to Ridge:**
-The lasso optimality condition at $\hat{b}_j = 0$ is a region: the gradient of the unpenalized loss must simply fall within the interval $[-\lambda, \lambda]$. Because this is a wide interval of width $2\lambda$, there is a high probability that the condition is met exactly, pinning the coefficient to absolute zero[cite: 1]. 
+The lasso optimality condition at $\hat{b}_j = 0$ is a region: the gradient of the unpenalized loss must simply fall within the interval $[-\lambda, \lambda]$. Because this is a wide interval of width $2\lambda$, there is a high probability that the condition is met exactly, pinning the coefficient to absolute zero. 
 In contrast, ridge regression is globally differentiable with a penalty gradient of $\lambda \hat{b}_j$. The ridge optimality condition is $(G + \lambda I_p)\hat{b} = z$. Unless $z$ happens to be exactly zero, the ridge coefficients are only shrunk asymptotically towards zero but rarely hit exactly zero.
-## 3B. Lasso optimality and soft thresholding Task RequireMent
-
-*Derive the zero/nonzero optimality conditions and the orthonormal-design formula.*
 
 ## 3C. Connect algebra to evidence
 
-*Connect one specific numerical result to Problem 3A or 3B.*
+## 3C. Connect algebra to evidence
+We choose the ridge regression tuning result from Problem 2B ($\lambda_{min} = 0.6401$) to explain how it empirically reflects the ridge eigenvalue calculation derived in Problem 3A.
+
+In Problem 3A, we established algebraically that the $L_2$ penalty rescues an ill-conditioned Gram matrix by shifting all of its eigenvalues strictly upward by $\lambda$. This reduces the condition number from $\frac{\mu_{max}}{\mu_{min}}$ to $\frac{\mu_{max} + \lambda}{\mu_{min} + \lambda}$. 
+
+Our numerical outputs directly demonstrate this mathematical mechanism. Due to extreme multicollinearity among the spatial body measurements, the unpenalized OLS matrix yielded a near-zero minimum eigenvalue ($\mu_{min} \approx 0.0236$) and a dangerously inflated condition number of $\kappa_2(G) \approx 373.58$. However, when the model applies the optimal ridge penalty ($\lambda_{min} = 0.6401$) identified via cross-validation in Problem 2B, this specific value acts as the algebraic shift. The denominator of the condition number becomes bounded away from zero ($0.0236 + 0.6401 = 0.6637$). By injecting the optimal penalty from Problem 2B into the eigenvalue calculation, the condition number drastically collapses to $\approx 14.27$. This specific numerical change empirically proves how the ridge penalty safely regularizes matrix inversion and prevents the inflated variance seen in unpenalized regression.
 
 # Problem 4. Elastic net and a neural-feature bridge
 

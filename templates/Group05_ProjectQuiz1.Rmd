@@ -43,6 +43,7 @@ We confirm that every group member can explain the submitted analysis. AI use is
 # Reproducible setup {-}
 
 ```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = TRUE)
 required_packages <- c("tidyverse", "glmnet", "broom", "knitr")
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
@@ -440,10 +441,11 @@ lasso_active_1se <- get_active_features(lasso_cv, "lambda.1se")
 
 # 4. Formatted output for the RMarkdown report
 cat(sprintf("lambda.min: %.4f (CV MSE: %.4f)\n", lasso_lambda_min, lasso_err_min))
-cat("Active predictors (lambda.min):", paste(lasso_active_min, collapse = ", "), "\n\n")
-
+cat("Active predictors (lambda.min):\n", 
+    paste(strwrap(paste(lasso_active_min, collapse = ", "), width = 70), collapse = "\n"), "\n\n")
 cat(sprintf("lambda.1se: %.4f (CV MSE: %.4f)\n", lasso_lambda_1se, lasso_err_1se))
-cat("Active predictors (lambda.1se):", paste(lasso_active_1se, collapse = ", "), "\n")
+cat("Active predictors (lambda.1se):\n", 
+    paste(strwrap(paste(lasso_active_1se, collapse = ", "), width = 70), collapse = "\n"), "\n")
 
 # 5. Visualizations
 par(mfrow = c(1, 2))
@@ -689,18 +691,216 @@ Our numerical outputs directly demonstrate this mathematical mechanism. Due to e
 
 ## 4A. Research question and source map
 
+**Research direction:** $L_2$ penalties and weight decay.
+
+**Research question:** In what sense is the $L_2$ penalty we apply to the output
+weights of our fixed ReLU feature model (Problem 4C) the same mechanism as
+"weight decay" in neural-network training, and where does that equivalence break
+down?
+
+| Claim | Exact primary source and locator | What it establishes | What it does not establish |
+|---|---|---|---|
+| Adding a term proportional to $\sum_i w_i^2$ to the training cost improves generalization by penalizing large weights, and its effect can be characterized through the reduction in the effective number of parameters. | Krogh and Hertz [-@krogh1991], *NeurIPS 4*, Eq. (1)–(2) and the "effective number of parameters" analysis. | That an $L_2$ cost term shrinks weights toward zero and yields a measurable generalization improvement in a feedforward network; this is the same additive penalty used in ridge. | That the shrinkage produces exact zeros, that it applies to input-to-hidden weights specifically, or that the equivalence survives adaptive optimizers. |
+| **(Methodological)** With adaptive gradient methods, adding $L_2$ to the loss is *not* equivalent to decaying weights; the decay must be decoupled from the gradient update. | Loshchilov and Hutter [-@loshchilov2019], ICLR 2019, Algorithm 2 (AdamW) and §2–3. | That "weight decay" and "$L_2$ penalty" name different procedures once the optimizer rescales gradients per-coordinate; prescribes decoupling as the fix. | That either variant induces sparsity, or that any conclusion transfers to our convex, closed-form `glmnet` setting, which uses neither Adam nor SGD. |
+
 ## 4B. Elastic net on original predictors
 
+```{r original-elastic-net, fig.height=4}
+alpha_grid <- c(0.10, 0.25, 0.50, 0.75, 0.90)
 
+cv_enet_list <- lapply(alpha_grid, function(a) {
+  fit_cv_glmnet(x_train, y_train, alpha = a, foldid = foldid)
+})
+names(cv_enet_list) <- paste0("alpha_", alpha_grid)
+
+enet_summary <- do.call(rbind, Map(function(a, fit) {
+  i_min <- match(fit$lambda.min, fit$lambda)
+  i_1se <- match(fit$lambda.1se, fit$lambda)
+  data.frame(
+    alpha       = a,
+    lambda.min  = fit$lambda.min,
+    cv_mse_min  = fit$cvm[i_min],
+    cv_se_min   = fit$cvsd[i_min],
+    nonzero_min = count_nonzero(fit, "lambda.min"),
+    lambda.1se  = fit$lambda.1se,
+    cv_mse_1se  = fit$cvm[i_1se],
+    nonzero_1se = count_nonzero(fit, "lambda.1se")
+  )
+}, alpha_grid, cv_enet_list))
+enet_summary$cv_rmse_min <- sqrt(enet_summary$cv_mse_min)
+
+kable(enet_summary, digits = 4, row.names = FALSE,
+      caption = "Elastic net over the alpha grid (shared folds, lambda tuned within each alpha)")
+
+# SELECTION RULE: minimum CV MSE across the (alpha, lambda.min) grid.
+best_i     <- which.min(enet_summary$cv_mse_min)
+enet_alpha <- enet_summary$alpha[best_i]
+enet_lam   <- enet_summary$lambda.min[best_i]
+cv_enet    <- cv_enet_list[[best_i]]
+
+cat("Selected alpha =", enet_alpha, "| lambda =", enet_lam,
+    "| CV MSE =", enet_summary$cv_mse_min[best_i], "\n")
+
+# CV curve at the selected alpha
+plot(cv_enet); title(paste0("Elastic net CV curve (alpha = ", enet_alpha, ")"), line = 2.5)
+
+# Coefficient path at the selected alpha
+enet_path <- glmnet(x_train, y_train, alpha = enet_alpha, standardize = FALSE)
+plot(enet_path, xvar = "lambda", label = TRUE)
+title(paste0("Elastic net coefficient paths (alpha = ", enet_alpha, ")"), line = 2.5)
+abline(v = log(enet_lam), lty = 2)
+
+# Nonzero slopes at the selected pair
+b_enet <- as.matrix(coef(cv_enet, s = "lambda.min"))
+b_enet <- b_enet[rownames(b_enet) != "(Intercept)", 1]
+kable(data.frame(predictor = names(b_enet[abs(b_enet) > 1e-8]),
+                 coefficient = as.numeric(b_enet[abs(b_enet) > 1e-8])),
+      digits = 4, row.names = FALSE,
+      caption = "Nonzero elastic-net slopes at the selected (alpha, lambda)")
+
+# Ridge / elastic net / lasso side by side
+bridge <- as.matrix(coef(ridge_cv, s = "lambda.min")); bridge <- bridge[-1, 1]
+blasso <- as.matrix(coef(lasso_cv, s = "lambda.min")); blasso <- blasso[-1, 1]
+kable(data.frame(predictor = names(bridge), ridge = bridge,
+                 elastic_net = b_enet, lasso = blasso),
+      digits = 4, row.names = FALSE,
+      caption = "Coefficients: ridge vs elastic net vs lasso (all at lambda.min)")
+
+cat("L2 norms  -> ridge:", sqrt(sum(bridge^2)), "| enet:", sqrt(sum(b_enet^2)),
+    "| lasso:", sqrt(sum(blasso^2)), "\n")
+cat("Nonzeros  -> ridge:", sum(abs(bridge) > 1e-8), "| enet:", sum(abs(b_enet) > 1e-8),
+    "| lasso:", sum(abs(blasso) > 1e-8), "\n")
+```
 
 ## 4C. Fixed ReLU features
 
+```{r random-relu-features, fig.height=4}
+relu <- function(z) pmax(z, 0)
+M <- 200L
+p <- ncol(x_train)
+
+# 1. Generate A and c ONCE from the declared seed
+set.seed(seeds$features)
+A <- matrix(rnorm(p * M, mean = 0, sd = sqrt(1 / p)), nrow = p, ncol = M)
+c_off <- rnorm(M, mean = 0, sd = 0.5)          # N(0, 0.5^2) -> sd = 0.5
+colnames(A) <- paste0("h", seq_len(M))
+
+# 2. Same A and c_off applied to train and test
+H_train_raw <- relu(sweep(x_train %*% A, 2L, c_off, "+"))
+H_test_raw  <- relu(sweep(x_test  %*% A, 2L, c_off, "+"))
+colnames(H_train_raw) <- colnames(H_test_raw) <- colnames(A)
+
+# 3. Drop constant / near-constant features using TRAINING info only, then scale
+h_prep  <- fit_scaler(H_train_raw)
+H_train <- apply_scaler(H_train_raw, h_prep)
+H_test  <- apply_scaler(H_test_raw,  h_prep)
+
+cat("Hidden features generated:", M,
+    "| dropped as constant on training:", length(h_prep$dropped),
+    "| retained:", ncol(H_train), "\n")
+
+# 4. Fit ridge / lasso / elastic net on H_train with the SHARED folds
+cv_h_ridge <- fit_cv_glmnet(H_train, y_train, alpha = 0, foldid = foldid)
+cv_h_lasso <- fit_cv_glmnet(H_train, y_train, alpha = 1, foldid = foldid)
+
+cv_h_enet_list <- lapply(alpha_grid, function(a) {
+  fit_cv_glmnet(H_train, y_train, alpha = a, foldid = foldid)
+})
+h_enet_cv <- vapply(cv_h_enet_list, function(f) f$cvm[match(f$lambda.min, f$lambda)], numeric(1))
+h_best_i    <- which.min(h_enet_cv)
+h_enet_alpha <- alpha_grid[h_best_i]
+cv_h_enet    <- cv_h_enet_list[[h_best_i]]
+
+feature_summary <- data.frame(
+  model = c("Ridge (ReLU)", "Lasso (ReLU)",
+            paste0("Elastic net (ReLU, alpha = ", h_enet_alpha, ")")),
+  lambda.min = c(cv_h_ridge$lambda.min, cv_h_lasso$lambda.min, cv_h_enet$lambda.min),
+  cv_mse = c(cv_h_ridge$cvm[match(cv_h_ridge$lambda.min, cv_h_ridge$lambda)],
+             cv_h_lasso$cvm[match(cv_h_lasso$lambda.min, cv_h_lasso$lambda)],
+             cv_h_enet$cvm[match(cv_h_enet$lambda.min, cv_h_enet$lambda)]),
+  active_features = c(count_nonzero(cv_h_ridge, "lambda.min"),
+                      count_nonzero(cv_h_lasso, "lambda.min"),
+                      count_nonzero(cv_h_enet,  "lambda.min")),
+  active_1se = c(count_nonzero(cv_h_ridge, "lambda.1se"),
+                 count_nonzero(cv_h_lasso, "lambda.1se"),
+                 count_nonzero(cv_h_enet,  "lambda.1se"))
+)
+feature_summary$cv_rmse <- sqrt(feature_summary$cv_mse)
+kable(feature_summary, digits = 4, row.names = FALSE,
+      caption = "Ridge, lasso, and elastic net on M = 200 fixed ReLU features")
+
+plot(cv_h_lasso); title("Lasso on ReLU features: CV curve", line = 2.5)
+kable(data.frame(alpha = alpha_grid, cv_mse = h_enet_cv,
+                 cv_rmse = sqrt(h_enet_cv)),
+      digits = 4, row.names = FALSE,
+      caption = "Elastic-net alpha search on the ReLU feature matrix")
+```
+**Parameter Distinction and Feature Counting:**
+
+In this experiment, the input-to-hidden weights (matrix $A$) and the hidden biases ($c_{off}$) are generated once from a Gaussian distribution and strictly fixed (frozen). The regularization models do not update them. The parameters being learned are the hidden-to-output weights (the $\beta$ coefficients of the linear models applied to the ReLU matrix $H$). Active features are counted by evaluating the learned $\beta$ vector; any feature whose corresponding absolute coefficient exceeds a strict numerical tolerance ($> 10^{-8}$) is classified as active, meaning it survived the shrinkage or soft-thresholding mechanisms.
 
 ## 4D. Locked declaration and final holdout evaluation
 
+> **Locked before viewing `y_test`:** 
+> *   **Preprocessing**: Center/scale constants and constant-feature dropping rules were computed exclusively on the training sets (`x_train` and `H_train`), then applied uniformly to the holdout sets (`x_test` and `H_test`).
+> *   **Candidate specifications**: OLS, Ridge, Lasso, and Elastic net on original predictors; Ridge, Lasso, and Elastic net on the M=200 ReLU feature matrix. 
+> *   **Selected tuning values**: All lambda and alpha parameters were selected via 5-fold cross-validation using the shared `foldid` on training data.
+> *   **Feature seed**: `seeds$features`.
+> *   **Nominated deployment model**: Lasso at `lambda.1se` on the original predictors (as justified in Section 2D).
+> *   **Metrics**: RMSE and MAE.
+
+```{r final-holdout-evaluation}
+# FIRST AND ONLY CHUNK THAT USES y_test. 
+# Evaluated strictly once without any subsequent tuning to preserve holdout validity.
+
+# 1. Generate OLS baseline predictions
+ols_test <- predict(ols_fit, newdata = data.frame(x_test))
+
+# 2. Compile all candidate model predictions into a named list
+# Note: Variables are explicitly matched to ridge_cv, lasso_cv, and cv_enet
+pred_table <- list(
+  "OLS"                          = ols_test,
+  "Ridge (lambda.min)"           = as.numeric(predict(ridge_cv, newx = x_test, s = "lambda.min")),
+  "Ridge (lambda.1se)"           = as.numeric(predict(ridge_cv, newx = x_test, s = "lambda.1se")),
+  "Lasso (lambda.min)"           = as.numeric(predict(lasso_cv, newx = x_test, s = "lambda.min")),
+  "Lasso (lambda.1se)"           = as.numeric(predict(lasso_cv, newx = x_test, s = "lambda.1se")),
+  "Elastic net (original)"       = as.numeric(predict(cv_enet, newx = x_test, s = "lambda.min")),
+  "Ridge (ReLU features)"        = as.numeric(predict(cv_h_ridge, newx = H_test, s = "lambda.min")),
+  "Lasso (ReLU features)"        = as.numeric(predict(cv_h_lasso, newx = H_test, s = "lambda.min")),
+  "Elastic net (ReLU features)"  = as.numeric(predict(cv_h_enet,  newx = H_test, s = "lambda.min"))
+)
+
+# 3. Calculate regression metrics (RMSE, MAE) across the prediction array
+holdout <- do.call(rbind, Map(function(nm, pr) {
+  m <- score_regression(y_test, pr)
+  data.frame(model = nm, RMSE = m["RMSE"], MAE = m["MAE"])
+}, names(pred_table), pred_table))
+
+# 4. Render the definitive holdout evaluation table
+kable(holdout, digits = 4, row.names = FALSE,
+      caption = "Final holdout performance (n_test = 51). Computed once; no retuning follows.")
+```
+
+**Holdout Evidence Evaluation:**
+The holdout evidence supports our predeclared choice. The nominated Lasso `lambda.1se` model achieved an RMSE of 4.4070. While this error is slightly higher than the best-performing Elastic net on ReLU features (RMSE 4.1310) and the unpenalized OLS (RMSE 4.1698), the tradeoff is entirely justified. Lasso `lambda.1se` successfully reduced the model to exactly 5 non-redundant predictors, maintaining strict clinical interpretability and structural stability without suffering a severe loss in predictive accuracy compared to the highly complex, 200-feature ReLU models.
 
 ## 4E. Deep-learning connection and limitations
 
+**1. L2 Penalty vs. Weight Decay in Adaptive Optimization**
+In standard stochastic gradient descent (SGD), adding an $L_2$ penalty to the loss function and applying explicit weight decay in the parameter update rule are mathematically equivalent. However, Loshchilov & Hutter (2019) establish that in adaptive gradient algorithms (e.g., Adam), these two mechanisms diverge. $L_2$ regularization dynamically scales the penalty based on historical gradients, which undertaxes weights with large gradients. Decoupling the weight decay step (AdamW) applies a constant shrinkage rate, correctly regularizing the network and improving generalization.
+
+**2. Output-Weight Sparsity vs. Input-to-Hidden Sparsity**
+When lasso ($L_1$ regularization) forces a learned output weight $\beta_m$ to exactly zero, it removes that specific hidden feature $h_m(x)$ from the final prediction. However, this does not create structural sparsity in the input-to-hidden layer. The incoming weights corresponding to that node (the $m$-th column of the fixed matrix $A$) remain dense and non-zero.
+
+**3. Dropout vs. Permanent Pruning**
+Dropout acts as a stochastic regularizer by temporarily masking random neuron activations during each forward pass to prevent complex co-adaptations. It is a dynamic training mechanism. In contrast, the exact sparsity induced by lasso or network pruning constitutes permanent removal. Once a coefficient is penalized to zero, the connection is permanently severed for both training and inference.
+
+**4. Fixed Features vs. Trained Deep Networks**
+The random ReLU feature matrix deployed in Section 4C functions as a fixed kernel projection. Because the projection matrix $A$ is frozen, the model fundamentally lacks representation learning—it cannot backpropagate error signals to optimize its internal feature representations. While it bridges linear models to non-linear transformations, it does not possess the hierarchical feature extraction capabilities of a fully trained deep neural network.
+
+**Limitations of the Experiment:**
+1. **High Variance to Initialization:** The non-linear feature space is dictated entirely by a single random draw of matrix $A$ (`seeds$features`). The evaluation metrics are highly sensitive to this unoptimized, stochastic initialization.
+2. **Lack of Gradient Flow:** By locking the hidden layer, this experiment cannot evaluate how regularization interacts with the vanishing or exploding gradient problems inherent to training deep, multilayered architectures.
 
 # Problem 5. Report quality and reproducibility
   
@@ -712,6 +912,7 @@ To guarantee that the relative paths in the `find_exam_data()` helper function r
 
     ASESII_24A02_ProjectQuiz1_Group05/
     ├── Group05_ProjectQuiz1.Rmd
+    ├── Group05_ProjectQuiz1.pdf
     ├── references.bib
     ├── README.txt
     └── data/
